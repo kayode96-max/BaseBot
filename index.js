@@ -5,6 +5,17 @@ const Decimal = require("decimal.js");
 const Web3 = require("web3");
 const crypto = require("crypto");
 
+// Portfolio management modules
+const PortfolioManager = require("./lib/portfolio");
+const PortfolioAnalytics = require("./lib/analytics");
+const TransactionHistory = require("./lib/transactions");
+const AssetAllocation = require("./lib/allocation");
+const PriceAlerts = require("./lib/alerts");
+const Rebalancer = require("./lib/rebalancer");
+const PerformanceTracker = require("./lib/performance");
+const Watchlist = require("./lib/watchlist");
+const PortfolioExporter = require("./lib/exporter");
+
 // Ensure environment variables are set.
 require("dotenv").config();
 
@@ -29,6 +40,17 @@ const userStates = {};
 
 // Local database for storing wallets.
 const db = new PouchDB('myapp');
+
+// Initialize portfolio management services
+const portfolioManager = new PortfolioManager(db);
+const analytics = new PortfolioAnalytics(db);
+const txHistory = new TransactionHistory(db);
+const allocation = new AssetAllocation(db);
+const alerts = new PriceAlerts(db);
+const rebalancer = new Rebalancer(db);
+const performance = new PerformanceTracker(db);
+const watchlist = new Watchlist(db);
+const exporter = new PortfolioExporter(db);
 
 // Initialize Coinbase SDK
 new Coinbase({
@@ -69,13 +91,71 @@ bot.command("start", async (ctx) => {
   userAddress = await getOrCreateAddress(user);
 
   const keyboard = new InlineKeyboard()
-    .text("Check Balance", "check_balance")
+    .text("💰 Check Balance", "check_balance")
     .row()
-    .text("Deposit ETH", "deposit_eth")
+    .text("📊 Portfolio", "portfolio")
+    .text("📈 Analytics", "analytics")
     .row()
-    .text("Withdraw ETH", "withdraw_eth")
+    .text("💸 Deposit ETH", "deposit_eth")
+    .text("🏦 Withdraw ETH", "withdraw_eth")
     .row()
-    .text("Buy", "buy")
+    .text("🔼 Buy", "buy")
+    .text("🔽 Sell", "sell")
+    .row()
+    .text("🔔 Alerts", "manage_alerts")
+    .text("👁 Watchlist", "watchlist")
+    .row()
+    .text("⚖️ Rebalance", "rebalance")
+    .text("📤 Export", "export")
+    .row()
+    .text("🔑 Export Key", "export_key")
+    .text("📌 Pin", "pin_message");
+
+  const welcomeMessage = `
+*Welcome to your Advanced Portfolio Manager!*
+Your Base address is ${userAddress.getId()}.
+
+Select an option below:`;
+
+  await sendReply(ctx, welcomeMessage, {
+    reply_markup: keyboard,
+    parse_mode: "Markdown",
+  });
+});
+
+// Portfolio command
+bot.command("portfolio", async (ctx) => {
+  const userAddress = await getOrCreateAddress(ctx.from);
+  const balances = await userAddress.listBalances();
+  
+  const portfolio = await portfolioManager.updatePortfolio(ctx.from.id, balances);
+  const summary = await portfolioManager.getSummary(ctx.from.id);
+  
+  let message = "*📊 Your Portfolio*\n\n";
+  message += `Total Assets: ${summary.totalAssets}\n`;
+  message += `Last Updated: ${new Date(summary.lastUpdated).toLocaleString()}\n\n`;
+  
+  Object.entries(summary.assets).forEach(([asset, data]) => {
+    message += `${asset}: ${data.amount}\n`;
+  });
+  
+  await ctx.reply(message, { parse_mode: "Markdown" });
+});
+
+// Analytics command
+bot.command("analytics", async (ctx) => {
+  const userAddress = await getOrCreateAddress(ctx.from);
+  const balances = await userAddress.listBalances();
+  const metrics = await analytics.getMetrics(ctx.from.id, balances);
+  
+  let message = "*📈 Portfolio Analytics*\n\n";
+  message += `Total Value: ${metrics.totalValue} ETH\n`;
+  message += `P&L: ${metrics.absolute} ETH (${metrics.percentage}%)\n`;
+  message += `ROI: ${metrics.roi}%\n`;
+  message += `Assets: ${metrics.assetCount}\n`;
+  
+  await ctx.reply(message, { parse_mode: "Markdown" });
+});
     .text("Sell", "sell")
     .row()
     .text("Export key", "export_key")
@@ -101,6 +181,12 @@ const callbackHandlers = {
   sell: handleInitialSell,
   pin_message: handlePinMessage,
   export_key: handleExportKey,
+  portfolio: handlePortfolio,
+  analytics: handleAnalytics,
+  manage_alerts: handleManageAlerts,
+  watchlist: handleWatchlist,
+  rebalance: handleRebalance,
+  export: handleExport,
 };
 
 bot.on("callback_query:data", async (ctx) => {
