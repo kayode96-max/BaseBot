@@ -1,6 +1,6 @@
 # Portfolio Management Bot - Features
 
-## ✅ Completed Integrations (15 commits)
+## ✅ Completed Integrations (22 commits)
 
 ### Core Portfolio Features
 1. **Portfolio Manager** - Track assets, balances, and holdings
@@ -20,6 +20,17 @@
 13. **Multi-Wallet** - Manage multiple wallets, combined view
 14. **Gas Optimizer** - Timing and batching strategies
 15. **Main Integration** - All modules connected to Telegram bot
+
+### Trading & Finance
+16. **Tax Calculator** - FIFO/LIFO, capital gains, loss harvesting
+17. **Limit Orders** - Stop-loss, take-profit, OCO orders
+18. **NFT Portfolio** - NFT tracking with rarity analysis
+19. **Staking Tracker** - Rewards tracking, validator management
+20. **Notifications** - Multi-channel alerts (Telegram/Email/Discord)
+
+### Documentation & Integration
+21. **Feature Documentation** - Comprehensive guide
+22. **Updated Main Bot** - All features integrated
 
 ## 🎯 Available Commands
 
@@ -72,6 +83,11 @@
 - `lib/dca-strategy.js` - DCA automation
 - `lib/multi-wallet.js` - Multi-wallet support
 - `lib/gas-optimizer.js` - Gas optimization
+- `lib/tax-calculator.js` - Tax tracking & reporting
+- `lib/limit-orders.js` - Advanced order types
+- `lib/nft-portfolio.js` - NFT tracking
+- `lib/staking-tracker.js` - Staking management
+- `lib/notifications.js` - Alert system
 
 ### Database
 - PouchDB for local storage
