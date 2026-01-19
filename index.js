@@ -15,6 +15,11 @@ const Rebalancer = require("./lib/rebalancer");
 const PerformanceTracker = require("./lib/performance");
 const Watchlist = require("./lib/watchlist");
 const PortfolioExporter = require("./lib/exporter");
+const RiskManager = require("./lib/risk-manager");
+const AutoCompounder = require("./lib/auto-compounder");
+const DCAStrategy = require("./lib/dca-strategy");
+const MultiWallet = require("./lib/multi-wallet");
+const GasOptimizer = require("./lib/gas-optimizer");
 
 // Ensure environment variables are set.
 require("dotenv").config();
@@ -108,7 +113,15 @@ bot.command("start", async (ctx) => {
     .text("⚖️ Rebalance", "rebalance")
     .text("📤 Export", "export")
     .row()
+    .text("🤖 DCA", "dca_menu")
+    .text("⚡ Auto-Compound", "compound_menu")
+    .row()
+    .text("🛡️ Risk", "risk_menu")
+    .text("⛽ Gas", "gas_menu")
+    .row()
+    .text("👛 Wallets", "wallet_menu")
     .text("🔑 Export Key", "export_key")
+    .row()
     .text("📌 Pin", "pin_message");
 
   const welcomeMessage = `
@@ -187,6 +200,11 @@ const callbackHandlers = {
   watchlist: handleWatchlist,
   rebalance: handleRebalance,
   export: handleExport,
+  dca_menu: handleDCAMenu,
+  compound_menu: handleCompoundMenu,
+  risk_menu: handleRiskMenu,
+  gas_menu: handleGasMenu,
+  wallet_menu: handleWalletMenu,
 };
 
 bot.on("callback_query:data", async (ctx) => {
@@ -566,6 +584,112 @@ async function handleExport(ctx) {
   );
   
   await sendReply(ctx, "```\n" + summary + "\n```", { parse_mode: "Markdown" });
+}
+
+// DCA Menu Handler
+async function handleDCAMenu(ctx) {
+  const schedules = DCAStrategy.getSchedules(ctx.from.id);
+  let message = "*🤖 Dollar Cost Averaging*\n\n";
+  
+  if (schedules.length === 0) {
+    message += "No active DCA schedules.\n\n";
+    message += "Create a new schedule with:\n";
+    message += "`/dca_create ASSET AMOUNT FREQUENCY`\n";
+    message += "Example: `/dca_create USDC 10 weekly`";
+  } else {
+    schedules.forEach((s, i) => {
+      message += `${i + 1}. ${s.asset}\n`;
+      message += `   Amount: ${s.amount} ETH\n`;
+      message += `   Frequency: ${s.frequency}\n`;
+      message += `   Status: ${s.enabled ? "Active" : "Paused"}\n`;
+      message += `   Total Invested: ${s.totalInvested} ETH\n\n`;
+    });
+  }
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+// Compound Menu Handler
+async function handleCompoundMenu(ctx) {
+  const strategy = AutoCompounder.getStrategy(ctx.from.id);
+  let message = "*⚡ Auto-Compounding*\n\n";
+  
+  if (!strategy) {
+    message += "Auto-compounding not configured.\n\n";
+    message += "Set up with:\n";
+    message += "`/compound_setup FREQUENCY MIN_AMOUNT`\n";
+    message += "Example: `/compound_setup daily 0.01`";
+  } else {
+    message += `Status: ${strategy.enabled ? "✅ Active" : "❌ Disabled"}\n`;
+    message += `Frequency: ${strategy.frequency}\n`;
+    message += `Min Threshold: ${strategy.minThreshold} ETH\n`;
+    message += `Reinvest: ${strategy.reinvestPercentage}%\n`;
+    message += `Next Compound: ${strategy.nextCompound.toLocaleString()}\n`;
+  }
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+// Risk Menu Handler
+async function handleRiskMenu(ctx) {
+  const metrics = RiskManager.getRiskMetrics(ctx.from.id);
+  let message = "*🛡️ Risk Management*\n\n";
+  
+  if (!metrics.profile) {
+    message += "No risk profile set.\n\n";
+    message += "Set profile with:\n";
+    message += "`/risk_profile conservative|moderate|aggressive`";
+  } else {
+    message += `Max Position Size: ${(metrics.profile.maxPositionSize * 100).toFixed(0)}%\n`;
+    message += `Max Drawdown: ${(metrics.profile.maxDrawdown * 100).toFixed(0)}%\n`;
+    message += `Stop Loss: ${(metrics.profile.stopLoss * 100).toFixed(0)}%\n`;
+    message += `Max Leverage: ${metrics.profile.maxLeverage}x\n`;
+  }
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+// Gas Menu Handler
+async function handleGasMenu(ctx) {
+  const gasPrice = await GasOptimizer.getGasPrice("standard");
+  const stats = GasOptimizer.getStatistics(7);
+  const optimal = await GasOptimizer.getOptimalTime();
+  
+  let message = "*⛽ Gas Optimization*\n\n";
+  message += "*Current Gas Prices:*\n";
+  message += `Standard: ${gasPrice.maxFee} Gwei (${gasPrice.waitTime})\n\n`;
+  
+  if (!stats.noData) {
+    message += "*7-Day Statistics:*\n`;
+    message += `Transactions: ${stats.transactions}\n`;
+    message += `Total Cost: ${stats.totalCost} ETH\n`;
+    message += `Avg Gas: ${stats.averageGasUsed}\n\n`;
+  }
+  
+  message += `*Timing:* ${optimal.optimal ? "✅ Good time" : "⚠️ " + optimal.reason}\n`;
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+// Wallet Menu Handler
+async function handleWalletMenu(ctx) {
+  const wallets = await MultiWallet.getUserWallets(ctx.from.id);
+  let message = "*👛 Multi-Wallet Manager*\n\n";
+  
+  if (wallets.length === 0) {
+    message += "No wallets found.\n";
+  } else {
+    wallets.forEach((w, i) => {
+      message += `${i + 1}. ${w.label} ${w.isActive ? "✅" : ""}\n`;
+      message += `   ${w.address.slice(0, 10)}...${w.address.slice(-8)}\n\n`;
+    });
+  }
+  
+  message += "\nCommands:\n";
+  message += "`/wallet_add LABEL` - Add new wallet\n";
+  message += "`/wallet_switch ID` - Switch active wallet";
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
 }
 
 // Encrypt and Decrypt functions
