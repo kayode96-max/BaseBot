@@ -453,6 +453,121 @@ async function handleExportKey(ctx) {
   await sendReply(ctx, privateKey);
 }
 
+// Portfolio management handlers
+async function handlePortfolio(ctx) {
+  const userAddress = await getOrCreateAddress(ctx.from);
+  const balances = await userAddress.listBalances();
+  const allocationData = await allocation.calculateAllocation(balances);
+  
+  let message = "*📊 Portfolio Overview*\n\n";
+  message += `Total Value: ${allocationData.totalValue} ETH\n\n`;
+  
+  Object.entries(allocationData.allocations).forEach(([asset, data]) => {
+    message += `${asset}: ${data.value} ETH (${data.percentage})\n`;
+  });
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+async function handleAnalytics(ctx) {
+  const userAddress = await getOrCreateAddress(ctx.from);
+  const balances = await userAddress.listBalances();
+  const metrics = await analytics.getMetrics(ctx.from.id, balances);
+  const perf = await performance.calculatePerformance(ctx.from.id, 30);
+  
+  let message = "*📈 Analytics Dashboard*\n\n";
+  message += `💰 Total Value: ${metrics.totalValue} ETH\n`;
+  message += `📊 P&L: ${metrics.absolute} ETH (${metrics.percentage}%)\n`;
+  message += `🎯 ROI: ${metrics.roi}%\n\n`;
+  
+  if (perf.percentChange) {
+    message += `📆 30-Day Performance: ${perf.percentChange}\n`;
+    message += `📈 Daily Avg: ${perf.dailyAverage} ETH\n`;
+  }
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+async function handleManageAlerts(ctx) {
+  const activeAlerts = await alerts.getActiveAlerts(ctx.from.id);
+  
+  let message = "*🔔 Price Alerts*\n\n";
+  if (activeAlerts.length === 0) {
+    message += "No active alerts.\n\n";
+  } else {
+    activeAlerts.forEach((alert, i) => {
+      message += `${i + 1}. ${alert.asset.toUpperCase()} ${alert.condition} ${alert.targetPrice}\n`;
+    });
+  }
+  message += "\nUse /setalert <asset> <price> <above|below> to create new alerts";
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+async function handleWatchlist(ctx) {
+  const watched = await watchlist.getWatchlist(ctx.from.id);
+  
+  let message = "*👁 Watchlist*\n\n";
+  if (watched.length === 0) {
+    message += "No assets in watchlist.\n\n";
+  } else {
+    watched.forEach((item, i) => {
+      message += `${i + 1}. ${item.asset.toUpperCase()}\n`;
+      if (item.notes) message += `   Note: ${item.notes}\n`;
+    });
+  }
+  message += "\nUse /watch <asset> to add to watchlist";
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+async function handleRebalance(ctx) {
+  const userAddress = await getOrCreateAddress(ctx.from);
+  const balances = await userAddress.listBalances();
+  const currentAlloc = await allocation.calculateAllocation(balances);
+  const targetAlloc = await allocation.getTargetAllocation(ctx.from.id);
+  
+  if (Object.keys(targetAlloc).length === 0) {
+    await sendReply(ctx, "No target allocation set. Use /settarget to configure.");
+    return;
+  }
+  
+  const recommendations = await rebalancer.getRebalanceRecommendations(
+    ctx.from.id,
+    currentAlloc.allocations,
+    targetAlloc,
+    currentAlloc.totalValue
+  );
+  
+  let message = "*⚖️ Rebalancing Recommendations*\n\n";
+  if (recommendations.length === 0) {
+    message += "✅ Portfolio is balanced!";
+  } else {
+    recommendations.forEach((rec, i) => {
+      message += `${i + 1}. ${rec.action.toUpperCase()} ${rec.amount} ${rec.asset}\n`;
+      message += `   Current: ${rec.currentPercent} → Target: ${rec.targetPercent}\n\n`;
+    });
+  }
+  
+  await sendReply(ctx, message, { parse_mode: "Markdown" });
+}
+
+async function handleExport(ctx) {
+  const userAddress = await getOrCreateAddress(ctx.from);
+  const balances = await userAddress.listBalances();
+  const history = await txHistory.getHistory(ctx.from.id);
+  const metrics = await analytics.getMetrics(ctx.from.id, balances);
+  
+  const summary = await exporter.exportSummary(
+    ctx.from.id,
+    balances,
+    metrics.totalValue,
+    { absolute: metrics.absolute, percentage: metrics.percentage, roi: metrics.roi }
+  );
+  
+  await sendReply(ctx, "```\n" + summary + "\n```", { parse_mode: "Markdown" });
+}
+
 // Encrypt and Decrypt functions
 function encrypt(text, iv) {
   const encryptionKey = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
