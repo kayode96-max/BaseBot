@@ -1,12 +1,17 @@
 import { Telegram } from "puregram";
 import dotenv from "dotenv";
-const basenameGenerator = require("../lib/basename-generator");
+const PouchDB = require("pouchdb");
+const BasenameGenerator = require("../lib/basename-generator");
 
 dotenv.config();
 
 const bot = new Telegram({
   token: process.env.BOT_TOKEN || "",
 });
+
+// Initialize basename generator with PouchDB
+const basenameDB = new PouchDB("basenames");
+const basenameGenerator = new BasenameGenerator(basenameDB);
 
 // Handle /start command
 bot.command("start", (ctx) => {
@@ -29,7 +34,11 @@ bot.command("help", (ctx) => {
     `/generate - Generate basename suggestions\n` +
     `/check <name> - Check if a basename is available\n` +
     `/register <name> - Register a basename\n` +
-    `/mynames - View your registered basenames\n\n` +
+    `/confirm <id> <tx> - Confirm registration\n` +
+    `/mynames - View your registered basenames\n` +
+    `/renew <name> [years] - Renew a basename\n` +
+    `/search <query> - Search for basenames\n` +
+    `/stats - View basename statistics\n\n` +
     `⚙️ *Other Commands:*\n` +
     `/start - Welcome message\n` +
     `/help - Show this message\n` +
@@ -80,7 +89,7 @@ bot.command("check", async (ctx) => {
   if (availability.available) {
     await ctx.send(
       `✅ *${basename}.base* is available!\n\n` +
-      `💰 Estimated cost: ${availability.estimatedCost}\n\n` +
+      `💰 Estimated cost: ${availability.estimatedCost.eth} ETH (~$${parseFloat(availability.estimatedCost.usd).toFixed(2)})\n\n` +
       `Use /register ${basename} to register it!`,
       { parse_mode: "Markdown" }
     );
@@ -100,14 +109,53 @@ bot.command("register", async (ctx) => {
   }
   
   try {
-    const result = await basenameGenerator.registerBasename(userId, basename);
+    // Mock wallet address - in production, get from user's wallet
+    const walletAddress = `0x${userId?.toString(16).padStart(40, '0')}`;
+    
+    const result = await basenameGenerator.registerBasename(userId, basename, walletAddress);
     await ctx.send(
       `🎉 *Registration Initiated!*\n\n` +
       `📝 Basename: \`${result.basename}.base\`\n` +
-      `💰 Cost: ${result.cost}\n` +
+      `💰 Cost: ${result.cost} ETH (~$${parseFloat(result.costUsd).toFixed(2)})\n` +
       `⏱ Duration: ${result.duration} year(s)\n` +
       `🆔 Registration ID: \`${result.registrationId}\`\n\n` +
-      `⚠️ *Note:* This is a demo. In production, you would need to complete the on-chain transaction.`,
+      `⏰ Payment window expires in: ${result.expiresIn}\n\n` +
+      `💡 *Next Steps:*\n` +
+      `Send ${result.cost} ETH to register on-chain\n` +
+      `Use /confirm ${result.registrationId} <txhash> to complete`,
+      { parse_mode: "Markdown" }
+    );
+  } catch (error: any) {
+    await ctx.send(`❌ Error: ${error.message}`);
+  }
+});
+
+// Handle /confirm command
+bot.command("confirm", async (ctx) => {
+  const userId = ctx.from?.id;
+  const parts = ctx.text.replace("/confirm", "").trim().split(" ");
+  
+  if (parts.length < 2) {
+    await ctx.send("⚠️ Usage: /confirm <registration_id> <tx_hash> [block_number]");
+    return;
+  }
+  
+  const [registrationId, txHash, blockNumber] = parts;
+  
+  try {
+    const result = await basenameGenerator.confirmRegistration(
+      registrationId, 
+      txHash, 
+      blockNumber ? parseInt(blockNumber) : undefined
+    );
+    
+    await ctx.send(
+      `🎊 *Registration Confirmed!*\n\n` +
+      `✅ ${result.fullName} is now yours!\n` +
+      `🔗 TX: \`${result.txHash}\`\n` +
+      `📅 Expires: ${new Date(result.expiresAt).toLocaleDateString()}\n` +
+      `${result.isPrimary ? '⭐ Set as your primary basename' : ''}\n\n` +
+      `Use /mynames to view all your basenames`,
       { parse_mode: "Markdown" }
     );
   } catch (error: any) {
@@ -118,24 +166,95 @@ bot.command("register", async (ctx) => {
 // Handle /mynames command
 bot.command("mynames", async (ctx) => {
   const userId = ctx.from?.id;
-  const userNames = basenameGenerator.getUserBasenames(userId);
-  const primary = basenameGenerator.getPrimaryBasename(userId);
+  const userNames = await basenameGenerator.getUserBasenames(userId);
+  const primary = await basenameGenerator.getPrimaryBasename(userId);
   
   if (userNames.length === 0) {
     await ctx.send("📝 You don't have any basenames registered yet.\n\nUse /generate to get suggestions!");
   } else {
     let message = "📝 *Your Basenames*\n\n";
-    userNames.forEach((name: string) => {
+    
+    for (const name of userNames) {
       const isPrimary = name === primary;
-      const info = basenameGenerator.getBasenameInfo(name);
+      const info = await basenameGenerator.getBasenameInfo(name);
       message += `${isPrimary ? "⭐" : "•"} \`${name}.base\`\n`;
       if (info) {
-        message += `  └ Expires: ${info.expiresAt.toLocaleDateString()}\n`;
+        message += `  └ Expires: ${new Date(info.expiresAt).toLocaleDateString()} (${info.daysUntilExpiry} days)\n`;
+        if (info.isExpired) {
+          message += `  └ ⚠️ EXPIRED - Use /renew ${name}\n`;
+        }
       }
-    });
+    }
+    
+    message += `\n💡 Total: ${userNames.length} basename(s)`;
     
     await ctx.send(message, { parse_mode: "Markdown" });
   }
+});
+
+// Handle /renew command
+bot.command("renew", async (ctx) => {
+  const userId = ctx.from?.id;
+  const parts = ctx.text.replace("/renew", "").trim().split(" ");
+  
+  if (parts.length < 1 || !parts[0]) {
+    await ctx.send("⚠️ Usage: /renew <basename> [years]");
+    return;
+  }
+  
+  const basename = parts[0];
+  const years = parts[1] ? parseInt(parts[1]) : 1;
+  
+  try {
+    const result = await basenameGenerator.renewBasename(userId, basename, years);
+    await ctx.send(
+      `♻️ *Basename Renewal*\n\n` +
+      `✅ ${basename}.base renewed for ${years} year(s)\n` +
+      `📅 New expiry: ${new Date(result.newExpiry).toLocaleDateString()}\n` +
+      `💰 Cost: ${result.cost} ETH (~$${parseFloat(result.costUsd).toFixed(2)})\n\n` +
+      `💡 Complete the transaction to finalize renewal`,
+      { parse_mode: "Markdown" }
+    );
+  } catch (error: any) {
+    await ctx.send(`❌ Error: ${error.message}`);
+  }
+});
+
+// Handle /search command
+bot.command("search", async (ctx) => {
+  const query = ctx.text.replace("/search", "").trim();
+  
+  if (!query) {
+    await ctx.send("⚠️ Usage: /search <query>");
+    return;
+  }
+  
+  const results = await basenameGenerator.searchBasenames(query, 10);
+  
+  if (results.length === 0) {
+    await ctx.send(`🔍 No basenames found matching "${query}"`);
+  } else {
+    let message = `🔍 *Search Results for "${query}"*\n\n`;
+    results.forEach((result: any) => {
+      message += `• \`${result.fullName}\`\n`;
+      message += `  └ Registered: ${new Date(result.registeredAt).toLocaleDateString()}\n`;
+    });
+    await ctx.send(message, { parse_mode: "Markdown" });
+  }
+});
+
+// Handle /stats command  
+bot.command("stats", async (ctx) => {
+  const stats = await basenameGenerator.getStats();
+  
+  const message = 
+    `📊 *Basename Statistics*\n\n` +
+    `Total Registered: ${stats.total}\n` +
+    `Active: ${stats.active}\n` +
+    `Expired: ${stats.expired}\n` +
+    `Average Length: ${stats.averageLength.toFixed(1)} characters`;
+    
+  await ctx.send(message, { parse_mode: "Markdown" });
 });
 
 // Handle /menu command
@@ -212,27 +331,27 @@ bot.on("callback_query", async (ctx) => {
     });
   } else if (data === "my_basenames") {
     await ctx.answerCallbackQuery();
-    const userNames = basenameGenerator.getUserBasenames(userId);
-    const primary = basenameGenerator.getPrimaryBasename(userId);
+    const userNames = await basenameGenerator.getUserBasenames(userId);
+    const primary = await basenameGenerator.getPrimaryBasename(userId);
     
     if (userNames.length === 0) {
       await ctx.send("📝 You don't have any basenames registered yet.\n\nUse /generate to get suggestions!");
     } else {
       let message = "📝 *Your Basenames*\n\n";
-      userNames.forEach((name: string) => {
+      for (const name of userNames) {
         const isPrimary = name === primary;
-        const info = basenameGenerator.getBasenameInfo(name);
+        const info = await basenameGenerator.getBasenameInfo(name);
         message += `${isPrimary ? "⭐" : "•"} \`${name}.base\`\n`;
         if (info) {
-          message += `  └ Expires: ${info.expiresAt.toLocaleDateString()}\n`;
+          message += `  └ Expires: ${new Date(info.expiresAt).toLocaleDateString()}\n`;
         }
-      });
+      }
       
       await ctx.send(message, { parse_mode: "Markdown" });
     }
   } else if (data === "set_primary") {
     await ctx.answerCallbackQuery();
-    const userNames = basenameGenerator.getUserBasenames(userId);
+    const userNames = await basenameGenerator.getUserBasenames(userId);
     
     if (userNames.length === 0) {
       await ctx.send("You need to register a basename first!");
@@ -248,7 +367,7 @@ bot.on("callback_query", async (ctx) => {
     }
   } else if (data?.startsWith("primary_")) {
     const basename = data.replace("primary_", "");
-    basenameGenerator.setPrimaryBasename(userId, basename);
+    await basenameGenerator.setPrimaryBasename(userId, basename);
     await ctx.answerCallbackQuery(`✅ ${basename}.base is now your primary basename!`);
   } else if (data === "back_menu") {
     await ctx.answerCallbackQuery();
