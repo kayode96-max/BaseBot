@@ -1,13 +1,11 @@
-import { Telegram } from "puregram";
+import { Bot } from "grammy";
 import dotenv from "dotenv";
 const PouchDB = require("pouchdb");
 const BasenameGenerator = require("../lib/basename-generator");
 
 dotenv.config();
 
-const bot = new Telegram({
-  token: process.env.BOT_TOKEN || "",
-});
+const bot = new Bot(process.env.BOT_TOKEN || "");
 
 // Initialize basename generator with PouchDB
 const basenameDB = new PouchDB("basenames");
@@ -278,7 +276,7 @@ bot.on("message", (ctx) => {
   console.log(`${userName} wrote: ${ctx.text}`);
   
   // Echo back the message
-  ctx.send(`📝 You said: ${ctx.text}`);
+  ctx.reply(`📝 You said: ${ctx.msg?.text}`);
 });
 
 // Handle button clicks (callback queries)
