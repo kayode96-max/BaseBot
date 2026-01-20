@@ -13,7 +13,7 @@ const basenameGenerator = new BasenameGenerator(basenameDB);
 
 // Handle /start command
 bot.command("start", (ctx) => {
-  ctx.send(
+  ctx.reply(
     `👋 *Welcome to Basebot!*\n\n` +
     `🏷️ Generate and manage your Base names with ease.\n\n` +
     `Try these commands:\n` +
@@ -26,7 +26,7 @@ bot.command("start", (ctx) => {
 
 // Handle /help command
 bot.command("help", (ctx) => {
-  ctx.send(
+  ctx.reply(
     `📋 *Available Commands:*\n\n` +
     `🏷️ *Basename Commands:*\n` +
     `/generate - Generate basename suggestions\n` +
@@ -48,11 +48,11 @@ bot.command("help", (ctx) => {
 
 // Handle /echo command
 bot.command("echo", (ctx) => {
-  const text = ctx.text.replace("/echo", "").trim();
+  const text = ctx.message?.text?.replace("/echo", "").trim() || "";
   if (text) {
-    ctx.send(`🔊 Echo: ${text}`);
+    ctx.reply(`🔊 Echo: ${text}`);
   } else {
-    ctx.send("⚠️ Please provide text to echo. Usage: /echo <your text>");
+    ctx.reply("⚠️ Please provide text to echo. Usage: /echo <your text>");
   }
 });
 
@@ -70,39 +70,39 @@ bot.command("generate", async (ctx) => {
   });
   message += "\n💡 Use /check <basename> to check availability";
   
-  await ctx.send(message, { parse_mode: "Markdown" });
+  await ctx.reply(message, { parse_mode: "Markdown" });
 });
 
 // Handle /check command
 bot.command("check", async (ctx) => {
-  const basename = ctx.text.replace("/check", "").trim();
+  const basename = ctx.message?.text?.replace("/check", "").trim() || "";
   
   if (!basename) {
-    await ctx.send("⚠️ Please provide a basename. Usage: /check <basename>");
+    await ctx.reply("⚠️ Please provide a basename. Usage: /check <basename>");
     return;
   }
   
   const availability = await basenameGenerator.checkAvailability(basename);
   
   if (availability.available) {
-    await ctx.send(
+    await ctx.reply(
       `✅ *${basename}.base* is available!\n\n` +
       `💰 Estimated cost: ${availability.estimatedCost.eth} ETH (~$${parseFloat(availability.estimatedCost.usd).toFixed(2)})\n\n` +
       `Use /register ${basename} to register it!`,
       { parse_mode: "Markdown" }
     );
   } else {
-    await ctx.send(`❌ ${availability.reason}`, { parse_mode: "Markdown" });
+    await ctx.reply(`❌ ${availability.reason}`, { parse_mode: "Markdown" });
   }
 });
 
 // Handle /register command
 bot.command("register", async (ctx) => {
   const userId = ctx.from?.id;
-  const basename = ctx.text.replace("/register", "").trim();
+  const basename = ctx.message?.text?.replace("/register", "").trim() || "";
   
   if (!basename) {
-    await ctx.send("⚠️ Please provide a basename. Usage: /register <basename>");
+    await ctx.reply("⚠️ Please provide a basename. Usage: /register <basename>");
     return;
   }
   
@@ -111,7 +111,7 @@ bot.command("register", async (ctx) => {
     const walletAddress = `0x${userId?.toString(16).padStart(40, '0')}`;
     
     const result = await basenameGenerator.registerBasename(userId, basename, walletAddress);
-    await ctx.send(
+    await ctx.reply(
       `🎉 *Registration Initiated!*\n\n` +
       `📝 Basename: \`${result.basename}.base\`\n` +
       `💰 Cost: ${result.cost} ETH (~$${parseFloat(result.costUsd).toFixed(2)})\n` +
@@ -124,17 +124,17 @@ bot.command("register", async (ctx) => {
       { parse_mode: "Markdown" }
     );
   } catch (error: any) {
-    await ctx.send(`❌ Error: ${error.message}`);
+    await ctx.reply(`❌ Error: ${error.message}`);
   }
 });
 
 // Handle /confirm command
 bot.command("confirm", async (ctx) => {
   const userId = ctx.from?.id;
-  const parts = ctx.text.replace("/confirm", "").trim().split(" ");
+  const parts = (ctx.message?.text?.replace("/confirm", "").trim() || "").split(" ");
   
   if (parts.length < 2) {
-    await ctx.send("⚠️ Usage: /confirm <registration_id> <tx_hash> [block_number]");
+    await ctx.reply("⚠️ Usage: /confirm <registration_id> <tx_hash> [block_number]");
     return;
   }
   
@@ -147,7 +147,7 @@ bot.command("confirm", async (ctx) => {
       blockNumber ? parseInt(blockNumber) : undefined
     );
     
-    await ctx.send(
+    await ctx.reply(
       `🎊 *Registration Confirmed!*\n\n` +
       `✅ ${result.fullName} is now yours!\n` +
       `🔗 TX: \`${result.txHash}\`\n` +
@@ -157,7 +157,7 @@ bot.command("confirm", async (ctx) => {
       { parse_mode: "Markdown" }
     );
   } catch (error: any) {
-    await ctx.send(`❌ Error: ${error.message}`);
+    await ctx.reply(`❌ Error: ${error.message}`);
   }
 });
 
@@ -168,7 +168,7 @@ bot.command("mynames", async (ctx) => {
   const primary = await basenameGenerator.getPrimaryBasename(userId);
   
   if (userNames.length === 0) {
-    await ctx.send("📝 You don't have any basenames registered yet.\n\nUse /generate to get suggestions!");
+    await ctx.reply("📝 You don't have any basenames registered yet.\n\nUse /generate to get suggestions!");
   } else {
     let message = "📝 *Your Basenames*\n\n";
     
@@ -186,17 +186,17 @@ bot.command("mynames", async (ctx) => {
     
     message += `\n💡 Total: ${userNames.length} basename(s)`;
     
-    await ctx.send(message, { parse_mode: "Markdown" });
+    await ctx.reply(message, { parse_mode: "Markdown" });
   }
 });
 
 // Handle /renew command
 bot.command("renew", async (ctx) => {
   const userId = ctx.from?.id;
-  const parts = ctx.text.replace("/renew", "").trim().split(" ");
+  const parts = (ctx.message?.text?.replace("/renew", "").trim() || "").split(" ");
   
   if (parts.length < 1 || !parts[0]) {
-    await ctx.send("⚠️ Usage: /renew <basename> [years]");
+    await ctx.reply("⚠️ Usage: /renew <basename> [years]");
     return;
   }
   
@@ -205,7 +205,7 @@ bot.command("renew", async (ctx) => {
   
   try {
     const result = await basenameGenerator.renewBasename(userId, basename, years);
-    await ctx.send(
+    await ctx.reply(
       `♻️ *Basename Renewal*\n\n` +
       `✅ ${basename}.base renewed for ${years} year(s)\n` +
       `📅 New expiry: ${new Date(result.newExpiry).toLocaleDateString()}\n` +
@@ -214,30 +214,30 @@ bot.command("renew", async (ctx) => {
       { parse_mode: "Markdown" }
     );
   } catch (error: any) {
-    await ctx.send(`❌ Error: ${error.message}`);
+    await ctx.reply(`❌ Error: ${error.message}`);
   }
 });
 
 // Handle /search command
 bot.command("search", async (ctx) => {
-  const query = ctx.text.replace("/search", "").trim();
+  const query = ctx.message?.text?.replace("/search", "").trim() || "";
   
   if (!query) {
-    await ctx.send("⚠️ Usage: /search <query>");
+    await ctx.reply("⚠️ Usage: /search <query>");
     return;
   }
   
   const results = await basenameGenerator.searchBasenames(query, 10);
   
   if (results.length === 0) {
-    await ctx.send(`🔍 No basenames found matching "${query}"`);
+    await ctx.reply(`🔍 No basenames found matching "${query}"`);
   } else {
     let message = `🔍 *Search Results for "${query}"*\n\n`;
     results.forEach((result: any) => {
       message += `• \`${result.fullName}\`\n`;
       message += `  └ Registered: ${new Date(result.registeredAt).toLocaleDateString()}\n`;
     });
-    await ctx.send(message, { parse_mode: "Markdown" });
+    await ctx.reply(message, { parse_mode: "Markdown" });
   }
 });
 
@@ -252,12 +252,12 @@ bot.command("stats", async (ctx) => {
     `Expired: ${stats.expired}\n` +
     `Average Length: ${stats.averageLength.toFixed(1)} characters`;
     
-  await ctx.send(message, { parse_mode: "Markdown" });
+  await ctx.reply(message, { parse_mode: "Markdown" });
 });
 
 // Handle /menu command
 bot.command("menu", async (ctx) => {
-  await ctx.send("📱 Main Menu", {
+  await ctx.reply("📱 Main Menu", {
     reply_markup: {
       inline_keyboard: [
         [{ text: "🏷️ Generate Basename", callback_data: "generate_basename" }],
@@ -273,7 +273,7 @@ bot.command("menu", async (ctx) => {
 // Handle text messages
 bot.on("message", (ctx) => {
   const userName = ctx.from?.first_name || "User";
-  console.log(`${userName} wrote: ${ctx.text}`);
+  console.log(`${userName} wrote: ${ctx.msg?.text}`);
   
   // Echo back the message
   ctx.reply(`📝 You said: ${ctx.msg?.text}`);
@@ -286,7 +286,7 @@ bot.on("callback_query", async (ctx) => {
   
   if (data === "generate_basename") {
     await ctx.answerCallbackQuery();
-    await ctx.send("🏷️ *Basename Generator*\n\nChoose a style:", {
+    await ctx.reply("🏷️ *Basename Generator*\n\nChoose a style:", {
       parse_mode: "Markdown",
       reply_markup: {
         inline_keyboard: [
@@ -321,10 +321,10 @@ bot.on("callback_query", async (ctx) => {
     message += "\n💡 Use /check <basename> to check availability";
     
     await ctx.answerCallbackQuery();
-    await ctx.send(message, { parse_mode: "Markdown" });
+    await ctx.reply(message, { parse_mode: "Markdown" });
   } else if (data === "check_basename") {
     await ctx.answerCallbackQuery();
-    await ctx.send("✅ *Check Basename Availability*\n\nSend me a basename to check (without .base extension)\n\nExample: `mycooldomain`", {
+    await ctx.reply("✅ *Check Basename Availability*\n\nSend me a basename to check (without .base extension)\n\nExample: `mycooldomain`", {
       parse_mode: "Markdown",
     });
   } else if (data === "my_basenames") {
@@ -333,7 +333,7 @@ bot.on("callback_query", async (ctx) => {
     const primary = await basenameGenerator.getPrimaryBasename(userId);
     
     if (userNames.length === 0) {
-      await ctx.send("📝 You don't have any basenames registered yet.\n\nUse /generate to get suggestions!");
+      await ctx.reply("📝 You don't have any basenames registered yet.\n\nUse /generate to get suggestions!");
     } else {
       let message = "📝 *Your Basenames*\n\n";
       for (const name of userNames) {
@@ -345,21 +345,21 @@ bot.on("callback_query", async (ctx) => {
         }
       }
       
-      await ctx.send(message, { parse_mode: "Markdown" });
+      await ctx.reply(message, { parse_mode: "Markdown" });
     }
   } else if (data === "set_primary") {
     await ctx.answerCallbackQuery();
     const userNames = await basenameGenerator.getUserBasenames(userId);
     
     if (userNames.length === 0) {
-      await ctx.send("You need to register a basename first!");
+      await ctx.reply("You need to register a basename first!");
     } else {
       const buttons = userNames.map((name: string) => [
         { text: `${name}.base`, callback_data: `primary_${name}` }
       ]);
       buttons.push([{ text: "⬅️ Back", callback_data: "back_menu" }]);
       
-      await ctx.send("⭐ Select your primary basename:", {
+      await ctx.reply("⭐ Select your primary basename:", {
         reply_markup: { inline_keyboard: buttons },
       });
     }
@@ -369,7 +369,7 @@ bot.on("callback_query", async (ctx) => {
     await ctx.answerCallbackQuery(`✅ ${basename}.base is now your primary basename!`);
   } else if (data === "back_menu") {
     await ctx.answerCallbackQuery();
-    await ctx.send("📱 Main Menu", {
+    await ctx.reply("📱 Main Menu", {
       reply_markup: {
         inline_keyboard: [
           [{ text: "🏷️ Generate Basename", callback_data: "generate_basename" }],
@@ -388,5 +388,6 @@ bot.on("callback_query", async (ctx) => {
 });
 
 // Start the bot
-bot.startPolling();
+bot.start();
 console.log("✅ Bot is running...");
+
