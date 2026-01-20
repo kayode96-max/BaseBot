@@ -169,21 +169,6 @@ bot.command("analytics", async (ctx) => {
   
   await ctx.reply(message, { parse_mode: "Markdown" });
 });
-    .text("Sell", "sell")
-    .row()
-    .text("Export key", "export_key")
-    .text("Pin message", "pin_message");
-
-  const welcomeMessage = `
-  *Welcome to your Onchain Trading Bot!*
-  Your Base address is ${userAddress.getId()}.
-  Select an option below:`;
-
-  await sendReply(ctx, welcomeMessage, {
-    reply_markup: keyboard,
-    parse_mode: "Markdown",
-  });
-});
 
 // Callback query handlers
 const callbackHandlers = {
@@ -660,7 +645,7 @@ async function handleGasMenu(ctx) {
   message += `Standard: ${gasPrice.maxFee} Gwei (${gasPrice.waitTime})\n\n`;
   
   if (!stats.noData) {
-    message += "*7-Day Statistics:*\n`;
+    message += "*7-Day Statistics:*\n";
     message += `Transactions: ${stats.transactions}\n`;
     message += `Total Cost: ${stats.totalCost} ETH\n`;
     message += `Avg Gas: ${stats.averageGasUsed}\n\n`;
